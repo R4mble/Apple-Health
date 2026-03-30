@@ -5,9 +5,9 @@ from datetime import datetime, timedelta
 import subprocess
 
 # 1. 配置信息
-REPO_DIR = "/Users/yourname/health_sync" # 你的本地 Git 仓库路径
+REPO_DIR = "data" # 你的本地 Git 仓库路径
 DATA_FILE = os.path.join(REPO_DIR, 'health_data.json')
-WEBHOOK_URL = "https://oapi.dingtalk.com/robot/send?access_token=你的TOKEN"
+WEBHOOK_URL = "https://open.larksuite.com/open-apis/bot/v2/hook/9baaca6c-d45d-4915-9db3-6de284bfaecb"
 
 def generate_and_send_report():
     # 2. 拉取最新代码
@@ -15,8 +15,8 @@ def generate_and_send_report():
     subprocess.run(f"cd {REPO_DIR} && git pull origin master", shell=True)
 
     # 3. 计算昨天的日期
-    yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-
+    yesterday = (datetime.now()).strftime('%Y-%m-%d')
+    # yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
     # 4. 读取数据
     if not os.path.exists(DATA_FILE):
         print("未找到数据文件")
@@ -35,11 +35,15 @@ def generate_and_send_report():
     steps = int(record.get('step', 0))
     static = int(record.get('static', 0))
     active = int(record.get('active', 0))
-    intake = int(record.get('intake', 0))
-    
+    food_log = record.get('food_log')
+    if isinstance(food_log, list) and len(food_log) > 0:
+        intake = int(sum(float(x.get('kcal', 0) or 0) for x in food_log))
+    else:
+        intake = int(record.get('intake', 0))
+
     total_burn = static + active
-    
-    # 5. 组装钉钉消息（包含状态判断）
+
+    # 5. 组装飞书机器人文本消息（包含状态判断）
     if intake > 0:
         deficit = total_burn - intake
         intake_str = f"{intake} 千卡"
@@ -60,16 +64,16 @@ def generate_and_send_report():
 -------------------------
 {conclusion}"""
 
-    # 6. 发送钉钉 Webhook
+    # 6. 发送飞书 Webhook（与 curl: msg_type + content.text 一致）
     payload = {
-        "msgtype": "text",
-        "text": {
-            "content": text_content # 确保内容包含钉钉机器人安全关键字（如"健康"或"总结"）
-        }
+        "msg_type": "text",
+        "content": {
+            "text": text_content,
+        },
     }
-    headers = {'Content-Type': 'application/json'}
+    headers = {"Content-Type": "application/json"}
     response = requests.post(WEBHOOK_URL, json=payload, headers=headers)
-    print("钉钉发送状态:", response.text)
+    print("飞书发送状态:", response.text)
 
 if __name__ == '__main__':
     generate_and_send_report()
