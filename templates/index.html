@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的健康控制台</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f6f8; color: #333; max-width: 960px; margin: 0 auto; padding: 20px; }
+        .card { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        h1, h2 { margin-top: 0; color: #1a1a1a; }
+        h2 { font-size: 1.15rem; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="date"], input[type="number"], input[type="text"], textarea {
+            width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box;
+        }
+        textarea { min-height: 100px; resize: vertical; }
+        button { background-color: #007aff; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; }
+        button:hover { background-color: #005bb5; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+        th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #eee; vertical-align: top; }
+        th { background-color: #f9fafb; font-weight: 600; }
+        .deficit-good { color: #34c759; font-weight: bold; }
+        .deficit-bad { color: #ff3b30; font-weight: bold; }
+        .muted { color: #666; font-size: 12px; }
+        .cell-ellipsis { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .subhint { font-size: 12px; color: #888; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <h1>🍏 健康控制台</h1>
+
+    <div class="card">
+        <h2>📊 历史数据看板</h2>
+        <div style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>日期</th>
+                        <th>步数</th>
+                        <th>静息 (千卡)</th>
+                        <th>活动 (千卡)</th>
+                        <th>总消耗</th>
+                        <th>饮食摄入</th>
+                        <th>热量缺口</th>
+                        <th>饮食明细</th>
+                        <th>运动</th>
+                        <th>心得</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for date, data in records.items() | sort(reverse=True) %}
+                    {% set total_burn = data.get('static', 0) + data.get('active', 0) %}
+                    {% set fl = data.get('food_log') %}
+                    {% set el = data.get('exercise_log') %}
+                    {% if fl and fl is sequence and fl is not string and fl | length > 0 %}
+                        {% set intake = (fl | sum(attribute='kcal')) | float %}
+                    {% else %}
+                        {% set intake = data.get('intake', 0) | float %}
+                    {% endif %}
+                    {% set deficit = total_burn - intake %}
+                    <tr>
+                        <td>{{ date }}</td>
+                        <td>{{ data.get('step', 0) | int }}</td>
+                        <td>{{ data.get('static', 0) | int }}</td>
+                        <td>{{ data.get('active', 0) | int }}</td>
+                        <td>{{ total_burn | int }}</td>
+                        <td>{{ intake | int if intake > 0 else '-' }}</td>
+                        <td>
+                            {% if intake > 0 %}
+                                <span class="{{ 'deficit-good' if deficit > 0 else 'deficit-bad' }}">
+                                    {{ deficit | int }}
+                                </span>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="cell-ellipsis" title="{% if fl and fl | length > 0 %}{% for x in fl %}{{ x.get('item','') }} {{ x.get('kcal',0)|int }}千卡{% if not loop.last %}；{% endif %}{% endfor %}{% elif data.get('intake', 0) %}仅总摄入，无分项{% else %}-{% endif %}">
+                            {% if fl %}
+                                {% for x in fl %}
+                                    {{ x.get('item','') }} ({{ x.get('kcal',0)|int }}){% if not loop.last %}、{% endif %}
+                                {% endfor %}
+                            {% elif data.get('intake', 0) %}
+                                <span class="muted">仅总数</span>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="cell-ellipsis" title="{% if el %}{% for e in el %}{{ e.get('name','') }}{% if e.get('duration_min') %} {{ e.duration_min }}分{% endif %}{% if e.get('kcal') %} ~{{ e.kcal|int }}千卡{% endif %}{% if not loop.last %}；{% endif %}{% endfor %}{% else %}-{% endif %}">
+                            {% if el %}
+                                {% for e in el %}
+                                    {{ e.get('name','') }}{% if e.get('duration_min') %} {{ e.duration_min }}′{% endif %}{% if not loop.last %}、{% endif %}
+                                {% endfor %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="cell-ellipsis" title="{{ data.get('daily_note','') }}">
+                            {% if data.get('daily_note') %}
+                                {{ data.daily_note[:40] }}{% if data.daily_note|length > 40 %}…{% endif %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>🍔 记录饮食（吃了啥 + 热量）</h2>
+        <p class="muted" style="margin-top:0;">每提交一次追加一条；当日总摄入 = 各条热量之和（可与 iOS 同步的消耗对比）。</p>
+        <form action="/api/food" method="POST">
+            <div class="form-group">
+                <label>日期</label>
+                <input type="date" name="date" id="foodDate" required>
+            </div>
+            <div class="form-group">
+                <label>吃了啥</label>
+                <input type="text" name="item" placeholder="例如：燕麦牛奶、鸡胸肉沙拉" required autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>本条热量（千卡）</label>
+                <input type="number" name="kcal" placeholder="例如：320" min="1" step="1" required>
+            </div>
+            <button type="submit">添加这条饮食并同步</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>🏃 今日运动记录</h2>
+        <form action="/api/exercise" method="POST">
+            <div class="form-group">
+                <label>日期</label>
+                <input type="date" name="date" id="exerciseDate" required>
+            </div>
+            <div class="form-group">
+                <label>运动项目</label>
+                <input type="text" name="name" placeholder="例如：慢跑、游泳、力量训练" required autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>时长（分钟，选填）</label>
+                <input type="number" name="duration_min" placeholder="例如：45" min="1" step="1">
+            </div>
+            <div class="form-group">
+                <label>运动消耗（千卡，选填）</label>
+                <input type="number" name="kcal" placeholder="若手表已计入活动消耗可留空" min="1" step="1">
+            </div>
+            <button type="submit">添加这条运动并同步</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>📝 今日心得</h2>
+        <form action="/api/note" method="POST">
+            <div class="form-group">
+                <label>日期</label>
+                <input type="date" name="date" id="noteDate" required>
+            </div>
+            <div class="form-group">
+                <label>心得 / 复盘</label>
+                <textarea name="note" placeholder="今天身体状态、睡眠、情绪、想记的一句话…"></textarea>
+                <div class="subhint">留空并保存会清除该日已保存的心得。</div>
+            </div>
+            <button type="submit">保存心得并同步</button>
+        </form>
+    </div>
+
+    <script>
+        const today = new Date();
+        ['foodDate', 'exerciseDate', 'noteDate'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.valueAsDate = today;
+        });
+    </script>
+</body>
+</html>

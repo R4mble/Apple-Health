@@ -1,0 +1,1 @@
+20 10 * * * /usr/bin/python3 /Users/yourname/health_sync/dingtalk_report.py
